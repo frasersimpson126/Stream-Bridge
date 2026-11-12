@@ -8,7 +8,7 @@
 (function () {
   "use strict";
 
-  var ADDON_COUNT = 5;
+  var ADDON_COUNT = 3;
   var REQUEST_TIMEOUT_MS = 9000;
   var MANIFEST_TIMEOUT_MS = 6000;
   var STREAM_TIMEOUT_MS = 10000;
@@ -307,6 +307,46 @@ n  }
     notify((text(manifest.name) || ("Add-on " + index)) + ": connection and search test passed (" + result.data.tracks.length + " tracks returned).");
   }
 
+  function diagnosticTrack() {
+    var title = text(setting('diagnostic_track_title'));
+    var artist = text(setting('diagnostic_track_artist'));
+    if (!title || !artist) return null;
+    return { title: title, artist: artist, isrc: text(setting('diagnostic_track_isrc')), durationMs: Number(setting('diagnostic_track_duration_ms')) || 0 };
+  }
+
+  function runDiagnostics() {
+    var addons = configuredAddons();
+    if (!addons.length) { notify('Diagnostics: no enabled add-ons with valid HTTPS URLs.'); return; }
+    var track = diagnosticTrack();
+    var passed = 0;
+    for (var i = 0; i < addons.length; i += 1) {
+      var addon = addons[i];
+      var manifest = getManifest(addon.base);
+      if (!manifest) { notify('Add-on ' + addon.index + ': FAIL — manifest unavailable or invalid.'); continue; }
+      if (!hasResource(manifest.resources, 'search') || !hasResource(manifest.resources, 'stream')) { notify('Add-on ' + addon.index + ': FAIL — search/stream capability missing.'); continue; }
+      var sample = requestJson(addon.base + '/search?' + myspoti.query({ q: TEST_QUERY }), REQUEST_TIMEOUT_MS);
+      if (!sample.ok || !Array.isArray(sample.data.tracks)) { notify('Add-on ' + addon.index + ': FAIL — sample search failed.'); continue; }
+      if (track && !resolveWithAddon(addon, track)) { notify('Add-on ' + addon.index + ': FAIL — diagnostic track did not produce a playable stream.'); continue; }
+      passed += 1;
+      notify((text(manifest.name) || ('Add-on ' + addon.index)) + ': PASS — ' + (track ? 'track resolved to a playable stream.' : 'manifest and sample search passed.'));
+    }
+    notify('Diagnostics complete: ' + passed + '/' + addons.length + ' providers passed.');
+  }
+
+  function testDiagnosticTrack() {
+    var track = diagnosticTrack();
+    if (!track) { notify('Track test: enter a diagnostic title and artist in settings.'); return; }
+    var addons = configuredAddons();
+    if (!addons.length) { notify('Track test: no enabled providers are configured.'); return; }
+    var fallback = setting('fallback_enabled') !== false;
+    for (var i = 0; i < addons.length; i += 1) {
+      var answer = resolveWithAddon(addons[i], track);
+      if (answer) { notify('Add-on ' + addons[i].index + ': diagnostic track passed; playable stream found.'); return; }
+      notify('Add-on ' + addons[i].index + ': diagnostic track failed.');
+      if (!fallback) break;
+    }
+    notify('Track test failed: no provider returned a playable stream.');
+  }
   myspoti.provide("status", function () {
     var addons = configuredAddons();
     if (!addons.length) return { live: false, detail: "Add at least one enabled HTTPS Eclipse add-on URL in Stream Bridge settings." };
@@ -336,7 +376,9 @@ n  }
 
   myspoti.on("setting", function (event) {
     if (!event || !event.pressed) return;
-    var match = text(event.key).match(/^addon_([1-5])_test$/);
+    var match = text(event.key).match(/^addon_([1-3])_test$/);
     if (match) testAddon(Number(match[1]));
+    else if (text(event.key) === 'run_diagnostics') runDiagnostics();
+    else if (text(event.key) === 'test_diagnostic_track') testDiagnosticTrack();
   });
 }());
