@@ -8,28 +8,46 @@
 (function () {
   "use strict";
 
-  var SETTING_URL = "addon_url";
+  var ADDON_COUNT = 5;
   var REQUEST_TIMEOUT_MS = 9000;
   var MANIFEST_TIMEOUT_MS = 6000;
   var STREAM_TIMEOUT_MS = 10000;
+  var TEST_QUERY = "Never Gonna Give You Up Rick Astley";
 
   function text(value) {
     return value === null || value === undefined ? "" : String(value).trim();
   }
 
-  function settingBaseUrl() {
-    var raw = text(myspoti.settings.get(SETTING_URL));
-    if (!raw) return null;
+  function setting(key) {
+    try { return myspoti.settings.get(key); } catch (ignored) { return undefined; }
+n  }
 
-    // Token-bearing path prefixes are supported. Query strings, fragments,
-    // URL credentials, and non-HTTPS schemes are deliberately rejected.
-    if (!/^https:\/\/[^/?#]+(?:\/[^?#]*)?$/i.test(raw)) return null;
+  function addonBase(index) {
+    var raw = text(setting("addon_" + index + "_url"));
+    if (!raw || !/^https:\/\/[^/?#]+(?:\/[^?#]*)?$/i.test(raw)) return null;
     var authority = raw.match(/^https:\/\/([^/]+)/i);
     if (!authority || authority[1].indexOf("@") !== -1) return null;
+    return raw.replace(/\/manifest\.json$/i, "").replace(/\/+$/, "") || null;
+  }
 
-    var base = raw.replace(/\/manifest\.json$/i, "");
-    base = base.replace(/\/+$/, "");
-    return base || null;
+  function addonEnabled(index) {
+    return setting("addon_" + index + "_enabled") !== false;
+  }
+
+  function configuredAddons() {
+    var list = [];
+    for (var i = 1; i <= ADDON_COUNT; i += 1) {
+      var base = addonBase(i);
+      if (base && addonEnabled(i)) list.push({ index: i, base: base });
+    }
+    return list;
+  }
+
+  function notify(message) {
+    try {
+      if (myspoti.notify) myspoti.notify(text(message).slice(0, 180));
+      else myspoti.log(text(message).slice(0, 180));
+    } catch (ignored) {}
   }
 
   function hasResource(resources, name) {
@@ -107,12 +125,18 @@
     if (wantedIsrc && foundIsrc && wantedIsrc !== foundIsrc) return false;
     if (wantedIsrc && foundIsrc && wantedIsrc === foundIsrc) return true;
 
-    if (wantedTitle !== foundTitle || wantedArtist !== foundArtist) return false;
-
+    var strict = setting("strict_match") !== false;
+    if (strict) {
+      if (wantedTitle !== foundTitle || wantedArtist !== foundArtist) return false;
+    } else {
+      if (wantedTitle !== foundTitle && wantedTitle.indexOf(foundTitle) < 0 && foundTitle.indexOf(wantedTitle) < 0) return false;
+      if (wantedArtist !== foundArtist && wantedArtist.indexOf(foundArtist) < 0 && foundArtist.indexOf(wantedArtist) < 0) return false;
+    }
     var wantedDuration = durationMs(requested);
     var foundDuration = Number(candidate.duration) * 1000;
     if (wantedDuration && isFinite(foundDuration) && foundDuration > 0) {
-      if (Math.abs(wantedDuration - foundDuration) > 8000) return false;
+      var tolerance = Number(setting("duration_tolerance")) || 8;
+      if (Math.abs(wantedDuration - foundDuration) > tolerance * 1000) return false;
     }
     return true;
   }
@@ -238,49 +262,81 @@
     return result.ok ? result.data : null;
   }
 
-  myspoti.provide("status", function () {
-    var base = settingBaseUrl();
+  function resolveWithAddon(addon, track) {
+    var base = addon.base;
+    var manifest = getManifest(base);
+    if (!manifest) return null;
+    var resolved = null;
+    if (normaliseIsrc(track.isrc) && hasResource(manifest.resources, "isrc")) {
+      resolved = resolveByIsrc(base, track, manifest);
+    }
+    if (!resolved && hasResource(manifest.resources, "resolve")) {
+      resolved = resolveByIdentity(base, track, manifest);
+    }
+    if (!resolved && hasResource(manifest.resources, "search")) {
+      resolved = resolveBySearch(base, track);
+    }
+    if (!resolved) return null;
+    if (text(resolved.streamURL)) {
+      return audioAnswer(track, { url: resolved.streamURL, format: resolved.format }, resolved.format);
+    }
+    if (!text(resolved.id)) return null;
+    return audioAnswer(track, fetchStream(base, resolved.id), resolved.format);
+  }
+
+  function testAddon(index) {
+    var base = addonBase(index);
     if (!base) {
-      return { live: false, detail: "Set an HTTPS Eclipse add-on manifest URL in Stream Bridge settings." };
+      notify("Add-on " + index + ": enter a valid HTTPS manifest URL first.");
+      return;
     }
     var manifest = getManifest(base);
     if (!manifest) {
-      return { live: false, detail: "Could not read the add-on manifest. Check the URL and any token path." };
+      notify("Add-on " + index + ": manifest check failed. Check URL, token and HTTPS access.");
+      return;
     }
-    return { live: true };
+    if (!hasResource(manifest.resources, "search") || !hasResource(manifest.resources, "stream")) {
+      notify("Add-on " + index + ": manifest must advertise both search and stream.");
+      return;
+    }
+    var result = requestJson(base + "/search?" + myspoti.query({ q: TEST_QUERY }), REQUEST_TIMEOUT_MS);
+    if (!result.ok || !Array.isArray(result.data.tracks)) {
+      notify("Add-on " + index + ": manifest works, but search test failed.");
+      return;
+    }
+    notify((text(manifest.name) || ("Add-on " + index)) + ": connection and search test passed (" + result.data.tracks.length + " tracks returned).");
+  }
+
+  myspoti.provide("status", function () {
+    var addons = configuredAddons();
+    if (!addons.length) return { live: false, detail: "Add at least one enabled HTTPS Eclipse add-on URL in Stream Bridge settings." };
+    for (var i = 0; i < addons.length; i += 1) {
+      if (getManifest(addons[i].base)) return { live: true };
+    }
+    return { live: false, detail: "No configured Eclipse add-on is responding. Test each add-on in settings." };
   });
 
   myspoti.provide("audio-source", function (track) {
     try {
       if (!track || !text(track.title) || !artistName(track)) return null;
-      var base = settingBaseUrl();
-      if (!base) return null;
-
-      var manifest = getManifest(base);
-      if (!manifest) return null;
-
-      var resolved;
-      if (normaliseIsrc(track.isrc) && hasResource(manifest.resources, "isrc")) {
-        resolved = resolveByIsrc(base, track, manifest);
-        if (!resolved) return null;
-      } else if (hasResource(manifest.resources, "resolve")) {
-        resolved = resolveByIdentity(base, track, manifest);
-        if (!resolved) return null;
-      } else {
-        resolved = resolveBySearch(base, track);
-        if (!resolved) return null;
+      var addons = configuredAddons();
+      if (!addons.length) return null;
+      var fallback = setting("fallback_enabled") !== false;
+      for (var i = 0; i < addons.length; i += 1) {
+        var answer = resolveWithAddon(addons[i], track);
+        if (answer) return answer;
+        if (!fallback) break;
       }
-
-      if (text(resolved.streamURL)) {
-        return audioAnswer(track, { url: resolved.streamURL, format: resolved.format }, resolved.format);
-      }
-
-      var stream = fetchStream(base, resolved.id);
-      return audioAnswer(track, stream, resolved.format);
+      return null;
     } catch (error) {
-      // Keep token-bearing URLs and provider-specific exception text out of logs.
-      try { myspoti.log("Stream Bridge: the configured add-on could not resolve this track."); } catch (ignored) {}
+      try { myspoti.log("Stream Bridge: all configured add-ons failed to resolve this track."); } catch (ignored) {}
       return null;
     }
+  });
+
+  myspoti.on("setting", function (event) {
+    if (!event || !event.pressed) return;
+    var match = text(event.key).match(/^addon_([1-5])_test$/);
+    if (match) testAddon(Number(match[1]));
   });
 }());

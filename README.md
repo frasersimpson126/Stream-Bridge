@@ -1,51 +1,61 @@
 # Stream Bridge
 
-An Orpheon / Myspoti extension that uses an **Eclipse Music add-on** as an audio provider. It asks the configured add-on to identify a recording, resolves its stream URL, and returns that URL to Orpheon's local player.
+Orpheon audio-source extension that bridges multiple Eclipse Music add-ons into Orpheon's playback source order.
 
-## What it does
+## Features
 
-- Uses the Eclipse add-on's `/manifest.json`, `/search`, `/resolve`, `/resolve-isrc`, and `/stream/{id}` endpoints where available.
-- Prefers exact ISRC resolution, then Eclipse's strict `/resolve` endpoint. If neither is advertised, it searches and accepts only a matching title and artist, with an 8-second duration tolerance when both durations are supplied.
-- Supports a direct `streamURL` in a search/resolve item or a URL returned by `/stream/{id}`.
-- Passes through known codec, container-derived MIME type, sample rate, bit depth, duration, and supported URL-expiry metadata.
-- Stores the add-on URL in a secret setting. Token paths are not written to the extension log.
+- Configure up to **five Eclipse add-ons** independently.
+- Each add-on has its own secret manifest URL, enable switch, and **Test add-on** button.
+- Add-ons are tried in settings order (Add-on 1 through Add-on 5).
+- If a provider is unavailable, has no suitable match, or cannot resolve a direct stream, the bridge tries the next enabled provider when fallback is enabled.
+- Within each provider, tries ISRC resolution, then the optional identity resolver, then search when those capabilities are advertised.
+- Strict matching is enabled by default. Optional relaxed matching and configurable duration tolerance are available.
+- Reports each test result through an Orpheon notification.
+- Token-bearing add-on URLs are stored as secret settings and are not written to logs.
 
-## Install
+## Configure
 
-1. Upload the contents of this repository to the root of `frasersimpson126/Stream-Bridge`.
-2. Add the GitHub topic `myspoti-extension` under the repository's **About → Topics** section if you want the extension to be discoverable by the extension store.
-3. In Orpheon, use **Install from an address** and enter `https://github.com/frasersimpson126/Stream-Bridge`.
-4. Review the permissions. The extension requests `audio.source` and the critical `network` permission for `*`, because the add-on selected by the user may be hosted on any public HTTPS domain. Install only if you accept this access.
-5. Open Stream Bridge settings and paste the Eclipse add-on URL. Use the complete manifest URL, for example `https://addon.example/manifest.json`. If the add-on uses a token path, include it: `https://addon.example/USER_TOKEN/manifest.json`.
-6. Put Stream Bridge at the top of the audio-source order if you want it to be tried before other sources.
+1. Install the extension in Orpheon.
+2. Open Stream Bridge's settings page.
+3. Paste each Eclipse add-on's complete HTTPS `manifest.json` URL into Add-on 1–5.
+4. Leave the corresponding Enable switch on for providers you want included.
+5. Press the **Test add-on N** button directly below each provider's URL and enable switch. A notification reports whether its manifest and search endpoint passed.
+6. Providers are tried in numerical order. Put your preferred provider in Add-on 1, the next choice in Add-on 2, and so on.
+7. Keep **Try the next add-on on failure** enabled to use automatic fallback.
 
-The Eclipse add-on does **not** need to be installed in the Orpheon app. Stream Bridge calls its public add-on API directly. Configure one add-on URL at a time; changing the setting switches the provider.
+The test button checks the manifest and sends a sample search request (`Never Gonna Give You Up Rick Astley`). It does not guarantee that every track can be streamed; a real playback attempt is still the definitive stream test.
 
-## Compatibility limits
+## Fallback behaviour
 
-This is a bridge between two different extension APIs, not a way to execute Eclipse add-on code inside Orpheon. It works with Eclipse add-ons whose manifest and API can be reached over public HTTPS and which return a direct playable audio URL.
+For each enabled provider, Stream Bridge:
 
-Orpheon's extension HTTP client does not send cookies, does not follow redirects, and refuses local/private network addresses. Therefore:
+1. Fetches and validates its manifest.
+2. Attempts ISRC resolution if advertised and an ISRC is present.
+3. Attempts the optional identity resolver if advertised.
+4. Searches for the track and checks the returned title, artist and (when available) duration.
+5. Uses a direct `streamURL` from the matched result, or calls `/stream/{id}`.
+6. Moves to the next enabled provider if the previous provider cannot produce a valid direct audio URL and fallback is enabled.
 
-- An add-on that relies on browser cookies or a login session will not work unless it supports a token in its URL path or otherwise exposes its API without cookies.
-- An add-on requiring a redirect before returning its JSON response may not work.
-- Localhost/LAN-only add-ons are not reachable from this extension runtime.
-- Eclipse HLS/DASH manifest responses are not passed through. Orpheon's `audio.source` URL hook accepts a direct URL; its separate manifest feature is not the same as Eclipse's general HLS/DASH response.
-- The add-on's returned URL must itself be a direct, public HTTP(S) audio URL. Orpheon performs its own public-address checks.
-- Stream Bridge does not bypass DRM, authentication, subscriptions, paywalls, or provider restrictions. Use add-ons and streams you are authorised to access.
+Strict matching is on by default. Relaxed matching can accept partial title/artist containment, so it may increase false matches. Duration tolerance applies only when both the requested and candidate durations are available.
+
+## Compatibility and limitations
+
+- Add-ons must be reachable over public HTTPS from Orpheon's extension HTTP client.
+- Orpheon's HTTP client does not send cookies or follow redirects. Token-in-path add-ons may work if the token is included in the manifest URL.
+- The returned audio URL must be a direct HTTP(S) audio URL. HLS/DASH manifests are not passed through.
+- Add-ons that only work on localhost/LAN, require browser cookies, or return redirect-only stream URLs will not work in this bridge.
+- The extension does not bypass DRM, subscriptions, paywalls, or provider access controls. Use providers and streams you are authorised to access.
 
 ## Development
 
-No runtime dependencies are required.
+No runtime dependencies are required. Validate with the official extension tooling:
 
 ```bash
-node tests/smoke-test.js
-python scripts/pack.py
+myspoti-ext check .
+myspoti-ext pack .
 ```
-
-The pack script writes `dist/io.github.frasersimpson126.streambridge-1.0.0.zip`, containing only the extension package files at the archive root. Before publishing a production release, validate with the official `myspoti-ext check .` and `myspoti-ext pack .` commands supported by your installed Orpheon/Myspoti extension tooling.
 
 ## API references
 
-- [Orpheon extension API](https://github.com/kota-zo/Orpheon/blob/main/docs/extensions/API.md)
+- [Orpheon / Myspoti extension API](https://github.com/kota-zo/myspoti/blob/main/docs/extensions/API.md)
 - [Eclipse Music add-on developer guide](https://eclipsemusic.app/docs)
