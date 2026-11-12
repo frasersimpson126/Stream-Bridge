@@ -20,7 +20,7 @@
 
   function setting(key) {
     try { return myspoti.settings.get(key); } catch (ignored) { return undefined; }
-n  }
+  }
 
   function addonBase(index) {
     var raw = text(setting("addon_" + index + "_url"));
