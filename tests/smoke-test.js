@@ -53,4 +53,9 @@ assert(runtime.notifications.some(n => n.includes('Provider Two') && n.includes(
 
 const noFallback = makeRuntime({ ...settings, fallback_enabled: false }, routes);
 assert.strictEqual(noFallback.provided['audio-source']({ title: 'Never Gonna Give You Up', artist: 'Rick Astley' }), null, 'disabled fallback should stop after first provider fails');
-console.log('Stream Bridge smoke tests passed: multi-provider fallback, direct stream metadata, per-provider test button, fallback toggle.');
+runtime.listeners.setting({ key: 'run_diagnostics', pressed: true });
+assert(runtime.notifications.some(n => n.includes('Diagnostics complete')), 'diagnostics button should report a summary');
+const diagnostic = makeRuntime({ ...settings, diagnostic_track_title: 'Never Gonna Give You Up', diagnostic_track_artist: 'Rick Astley', diagnostic_track_duration_ms: 213000 }, routes);
+diagnostic.listeners.setting({ key: 'test_diagnostic_track', pressed: true });
+assert(diagnostic.notifications.some(n => n.includes('playable stream found')), 'diagnostic track button should find a playable stream');
+console.log('Stream Bridge smoke tests passed: fallback, stream metadata, provider test, diagnostics and track test.');
