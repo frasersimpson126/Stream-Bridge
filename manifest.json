@@ -1,8 +1,8 @@
 {
   "id": "io.github.frasersimpson126.streambridge",
   "name": "Stream Bridge",
-  "version": "1.1.0",
-  "versionCode": 2,
+  "version": "1.2.0",
+  "versionCode": 3,
   "apiVersion": 1,
   "author": "Fraser Simpson",
   "description": "Resolve tracks",
@@ -89,46 +89,6 @@
       "description": "Checks the manifest and performs a sample search. No audio is played."
     },
     {
-      "key": "addon_4_url",
-      "type": "secret",
-      "label": "Add-on 4 URL",
-      "description": "Eclipse add-on manifest URL, including any token path. Example: https://host.example/token/manifest.json",
-      "default": ""
-    },
-    {
-      "key": "addon_4_enabled",
-      "type": "toggle",
-      "label": "Enable add-on 4",
-      "description": "Include this add-on in the playback fallback order.",
-      "default": true
-    },
-    {
-      "key": "addon_4_test",
-      "type": "button",
-      "label": "Test add-on 4",
-      "description": "Checks the manifest and performs a sample search. No audio is played."
-    },
-    {
-      "key": "addon_5_url",
-      "type": "secret",
-      "label": "Add-on 5 URL",
-      "description": "Eclipse add-on manifest URL, including any token path. Example: https://host.example/token/manifest.json",
-      "default": ""
-    },
-    {
-      "key": "addon_5_enabled",
-      "type": "toggle",
-      "label": "Enable add-on 5",
-      "description": "Include this add-on in the playback fallback order.",
-      "default": true
-    },
-    {
-      "key": "addon_5_test",
-      "type": "button",
-      "label": "Test add-on 5",
-      "description": "Checks the manifest and performs a sample search. No audio is played."
-    },
-    {
       "key": "fallback_enabled",
       "type": "toggle",
       "label": "Try the next add-on on failure",
@@ -154,6 +114,46 @@
         "20"
       ],
       "default": "8"
+    },
+    {
+      "key": "diagnostic_track_title",
+      "type": "text",
+      "label": "Diagnostic track title",
+      "description": "Track title used for the playback diagnostic.",
+      "default": "Never Gonna Give You Up"
+    },
+    {
+      "key": "diagnostic_track_artist",
+      "type": "text",
+      "label": "Diagnostic track artist",
+      "description": "Track artist used for the playback diagnostic.",
+      "default": "Rick Astley"
+    },
+    {
+      "key": "diagnostic_track_isrc",
+      "type": "text",
+      "label": "Diagnostic track ISRC (optional)",
+      "description": "Optional ISRC for exact recording matching.",
+      "default": ""
+    },
+    {
+      "key": "diagnostic_track_duration_ms",
+      "type": "number",
+      "label": "Diagnostic track duration (ms)",
+      "description": "Optional duration in milliseconds. Use 0 if unknown.",
+      "default": 0
+    },
+    {
+      "key": "run_diagnostics",
+      "type": "button",
+      "label": "Run diagnostics",
+      "description": "Check each enabled provider's manifest and search endpoint, and test the configured track."
+    },
+    {
+      "key": "test_diagnostic_track",
+      "type": "button",
+      "label": "Test diagnostic track",
+      "description": "Try to resolve the configured track to a playable stream using provider fallback order."
     }
   ],
   "tags": [
