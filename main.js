@@ -284,6 +284,59 @@
     return audioAnswer(track, fetchStream(base, resolved.id), resolved.format);
   }
 
+  function downloadAnswer(track, stream, fallbackFormat, isrcMatched) {
+    if (!stream || !isWebAudioUrl(stream.url)) return null;
+    if (stream.manifest && String(stream.manifest).toLowerCase() !== "none") return null;
+    if (/\\.(m3u8|mpd)(?:[?#]|$)/i.test(text(stream.url))) return null;
+
+    var format = text(stream.format || fallbackFormat).toLowerCase();
+    if (format === "mp4" || format === "aac" || format === "alac") format = "m4a";
+    if (format !== "flac" && format !== "m4a" && format !== "mp3") return null;
+
+    var file = {
+      url: text(stream.url),
+      format: format,
+      provider: "Eclipse Music"
+    };
+    var bitDepth = Number(stream.bitDepth);
+    if (isFinite(bitDepth) && bitDepth >= 8 && bitDepth <= 32) file.bitDepth = bitDepth;
+    var sampleRate = Number(stream.sampleRate);
+    if (isFinite(sampleRate) && sampleRate >= 8000 && sampleRate <= 768000) file.sampleRate = sampleRate;
+    var sizeHint = Number(stream.sizeHint || stream.size);
+    if (isFinite(sizeHint) && sizeHint > 0) file.sizeHint = Math.round(sizeHint);
+    if (isrcMatched) file.isrcMatched = true;
+    return file;
+  }
+
+  function resolveDownloadWithAddon(addon, track) {
+    var base = addon.base;
+    var manifest = getManifest(base);
+    if (!manifest) return null;
+
+    var resolved = null;
+    var matchedByIsrc = false;
+    if (normaliseIsrc(track.isrc) && hasResource(manifest.resources, "isrc")) {
+      resolved = resolveByIsrc(base, track, manifest);
+      matchedByIsrc = !!resolved;
+    }
+    if (!resolved && hasResource(manifest.resources, "resolve")) {
+      resolved = resolveByIdentity(base, track, manifest);
+    }
+    if (!resolved && hasResource(manifest.resources, "search")) {
+      resolved = resolveBySearch(base, track);
+    }
+    if (!resolved) return null;
+
+    var stream = null;
+    if (text(resolved.streamURL)) {
+      stream = { url: resolved.streamURL, format: resolved.format };
+    } else if (text(resolved.id)) {
+      stream = fetchStream(base, resolved.id);
+    }
+    var file = downloadAnswer(track, stream, resolved.format, matchedByIsrc);
+    return file ? [file] : null;
+  }
+
   function testAddon(index) {
     var base = addonBase(index);
     if (!base) {
@@ -354,6 +407,24 @@
       if (getManifest(addons[i].base)) return { live: true };
     }
     return { live: false, detail: "No configured Eclipse add-on is responding. Test each add-on in settings." };
+  });
+
+  myspoti.provide("download-source", function (track) {
+    try {
+      if (!track || !text(track.title) || !artistName(track)) return null;
+      var addons = configuredAddons();
+      if (!addons.length) return null;
+      var fallback = setting("fallback_enabled") !== false;
+      for (var i = 0; i < addons.length; i += 1) {
+        var files = resolveDownloadWithAddon(addons[i], track);
+        if (files && files.length) return files;
+        if (!fallback) break;
+      }
+      return null;
+    } catch (error) {
+      try { myspoti.log("Stream Bridge: configured add-ons could not provide a download."); } catch (ignored) {}
+      return null;
+    }
   });
 
   myspoti.provide("audio-source", function (track) {
