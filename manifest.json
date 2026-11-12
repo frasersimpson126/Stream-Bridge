@@ -9,16 +9,16 @@
   "actions": [
     {
       "name": "audio.source",
-      "why": "Finds the requested recording through your Eclipse Music add-on and returns its playable audio stream."
+      "why": "Finds the requested recording."
     },
     {
       "name": "network",
       "hosts": ["*"],
-      "why": "Connects to the Eclipse add-on you choose, which may be hosted on any public HTTPS domain."
+      "why": "Connects to the Eclipse add-on."
     },
     {
       "name": "settings.page",
-      "why": "Lets you configure the Eclipse add-on URL used to resolve and stream tracks."
+      "why": "Lets you configure."
     }
   ],
   "settings": [
