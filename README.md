@@ -1,10 +1,12 @@
 # Stream Bridge
 
-Orpheon audio-source extension that bridges multiple Eclipse Music add-ons into Orpheon's playback source order.
+Orpheon audio-source and download-source extension that bridges multiple Eclipse Music add-ons into Orpheon's playback and offline-download source orders.
 
 ## Features
 
 - Configure up to **three Eclipse add-ons** independently.
+- Provide both playback streams and offline download files to Orpheon.
+- Downloads use the first matching direct FLAC, M4A or MP3 file returned by an Eclipse add-on, with the same provider fallback order as playback.
 - Each add-on has its own secret manifest URL, enable switch, and **Test add-on** button.
 - Add-ons are tried in settings order (Add-on 1 through Add-on 3).
 - If a provider is unavailable, has no suitable match, or cannot resolve a direct stream, the bridge tries the next enabled provider when fallback is enabled.
@@ -29,6 +31,12 @@ The test button checks the manifest and sends a sample search request (`Never Go
 ## Diagnostics
 
 Use **Run diagnostics** to check each enabled provider's manifest, required capabilities and sample search endpoint. Configure the diagnostic track title and artist (plus optional ISRC and duration) to include a real playback-resolution test. **Test diagnostic track** attempts to find a playable stream through providers in order, respecting the fallback setting. Notifications report pass/fail results without printing token-bearing URLs.
+
+## Downloads
+
+Stream Bridge also registers Orpheon's `download-source` hook. When Orpheon requests an offline download, it resolves the track through the configured Eclipse add-ons, retrieves the provider's stream response and returns a direct FLAC, M4A or MP3 URL. If a provider cannot resolve the track or does not return a supported direct file URL, the next enabled add-on is tried when fallback is enabled. Orpheon performs its own file validation and stores accepted downloads encrypted on the device.
+
+The bridge does not convert formats or download HLS/DASH manifests. An add-on must return a direct public HTTPS audio URL in a supported format. The requested Orpheon quality is not translated into provider-specific quality settings; the add-on's returned format is used.
 
 ## Fallback behaviour
 
