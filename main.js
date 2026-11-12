@@ -287,7 +287,7 @@
   function downloadAnswer(track, stream, fallbackFormat, isrcMatched) {
     if (!stream || !isWebAudioUrl(stream.url)) return null;
     if (stream.manifest && String(stream.manifest).toLowerCase() !== "none") return null;
-    if (/\\.(m3u8|mpd)(?:[?#]|$)/i.test(text(stream.url))) return null;
+    if (/\.(m3u8|mpd)(?:[?#]|$)/i.test(text(stream.url))) return null;
 
     var format = text(stream.format || fallbackFormat).toLowerCase();
     if (format === "mp4" || format === "aac" || format === "alac") format = "m4a";
