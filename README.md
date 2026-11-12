@@ -4,26 +4,31 @@ Orpheon audio-source extension that bridges multiple Eclipse Music add-ons into 
 
 ## Features
 
-- Configure up to **five Eclipse add-ons** independently.
+- Configure up to **three Eclipse add-ons** independently.
 - Each add-on has its own secret manifest URL, enable switch, and **Test add-on** button.
-- Add-ons are tried in settings order (Add-on 1 through Add-on 5).
+- Add-ons are tried in settings order (Add-on 1 through Add-on 3).
 - If a provider is unavailable, has no suitable match, or cannot resolve a direct stream, the bridge tries the next enabled provider when fallback is enabled.
 - Within each provider, tries ISRC resolution, then the optional identity resolver, then search when those capabilities are advertised.
 - Strict matching is enabled by default. Optional relaxed matching and configurable duration tolerance are available.
 - Reports each test result through an Orpheon notification.
+- Diagnostic tools check all configured providers and test a configurable track through the fallback chain.
 - Token-bearing add-on URLs are stored as secret settings and are not written to logs.
 
 ## Configure
 
 1. Install the extension in Orpheon.
 2. Open Stream Bridge's settings page.
-3. Paste each Eclipse add-on's complete HTTPS `manifest.json` URL into Add-on 1–5.
+3. Paste each Eclipse add-on's complete HTTPS `manifest.json` URL into Add-on 1–3.
 4. Leave the corresponding Enable switch on for providers you want included.
 5. Press the **Test add-on N** button directly below each provider's URL and enable switch. A notification reports whether its manifest and search endpoint passed.
 6. Providers are tried in numerical order. Put your preferred provider in Add-on 1, the next choice in Add-on 2, and so on.
 7. Keep **Try the next add-on on failure** enabled to use automatic fallback.
 
 The test button checks the manifest and sends a sample search request (`Never Gonna Give You Up Rick Astley`). It does not guarantee that every track can be streamed; a real playback attempt is still the definitive stream test.
+
+## Diagnostics
+
+Use **Run diagnostics** to check each enabled provider's manifest, required capabilities and sample search endpoint. Configure the diagnostic track title and artist (plus optional ISRC and duration) to include a real playback-resolution test. **Test diagnostic track** attempts to find a playable stream through providers in order, respecting the fallback setting. Notifications report pass/fail results without printing token-bearing URLs.
 
 ## Fallback behaviour
 
