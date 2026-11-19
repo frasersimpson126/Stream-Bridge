@@ -97,12 +97,19 @@
   function requestJson(url, timeoutMs) {
     try {
       var response = myspoti.http.get(url, { timeout: timeoutMs || REQUEST_TIMEOUT_MS });
-      if (!response || !response.ok) {
-        return { ok: false, status: response ? response.status : 0, data: null };
+      if (!response) return { ok: false, status: 0, data: null };
+      var payload = null;
+      try { payload = response.json(); } catch (ignoredJson) {}
+      // Eclipse addons may attach useful rate-limit or preparation notices to
+      // error responses (including HTTP 429), so surface them before fallback.
+      if (payload && payload.notice && typeof payload.notice === "object") {
+        var notice = payload.notice;
+        var message = text(notice.title);
+        if (text(notice.message)) message += (message ? ": " : "") + text(notice.message);
+        if (message) notify(message.slice(0, 180));
       }
-      var payload = response.json();
-      if (!payload || typeof payload !== "object") {
-        return { ok: false, status: response.status, data: null };
+      if (!response.ok || !payload || typeof payload !== "object") {
+        return { ok: false, status: response.status, data: payload };
       }
       return { ok: true, status: response.status, data: payload };
     } catch (error) {
