@@ -40,6 +40,13 @@
       "default": ""
     },
     {
+      "key": "addon_1_settings",
+      "type": "secret",
+      "label": "Add-on 1 settings (JSON)",
+      "description": "Optional Eclipse manifest settings as a JSON object of key/value pairs. Manifest defaults are applied automatically; supplied values override them.",
+      "default": ""
+    },
+    {
       "key": "addon_1_enabled",
       "type": "toggle",
       "label": "Enable add-on 1",
@@ -60,6 +67,13 @@
       "default": ""
     },
     {
+      "key": "addon_2_settings",
+      "type": "secret",
+      "label": "Add-on 2 settings (JSON)",
+      "description": "Optional Eclipse manifest settings as a JSON object of key/value pairs. Manifest defaults are applied automatically; supplied values override them.",
+      "default": ""
+    },
+    {
       "key": "addon_2_enabled",
       "type": "toggle",
       "label": "Enable add-on 2",
@@ -77,6 +91,13 @@
       "type": "secret",
       "label": "Add-on 3 URL",
       "description": "Eclipse add-on manifest URL, including any token path. Example: https://host.example/token/manifest.json",
+      "default": ""
+    },
+    {
+      "key": "addon_3_settings",
+      "type": "secret",
+      "label": "Add-on 3 settings (JSON)",
+      "description": "Optional Eclipse manifest settings as a JSON object of key/value pairs. Manifest defaults are applied automatically; supplied values override them.",
       "default": ""
     },
     {
