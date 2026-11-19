@@ -54,6 +54,46 @@
     return resources && typeof resources.indexOf === "function" && resources.indexOf(name) !== -1;
   }
 
+  // Eclipse sends manifest-declared settings as query parameters on every
+  // addon request. Orpheon cannot create settings dynamically from a remote
+  // manifest, so users can supply the same key/value pairs in the secret
+  // per-addon JSON setting. Manifest defaults are honoured automatically.
+  function addonQuery(addon, manifest, params) {
+    var values = {};
+    var definitions = manifest && Array.isArray(manifest.settings) ? manifest.settings : [];
+    for (var i = 0; i < definitions.length; i += 1) {
+      var definition = definitions[i];
+      if (definition && text(definition.key) && definition.default !== undefined) {
+        values[text(definition.key)] = definition.default;
+      }
+    }
+    var raw = text(setting("addon_" + addon.index + "_settings"));
+    if (raw) {
+      try {
+        var custom = JSON.parse(raw);
+        if (custom && typeof custom === "object" && !Array.isArray(custom)) {
+          for (var key in custom) {
+            if (Object.prototype.hasOwnProperty.call(custom, key) &&
+                (typeof custom[key] === "string" || typeof custom[key] === "number" || typeof custom[key] === "boolean")) {
+              values[key] = custom[key];
+            }
+          }
+        }
+      } catch (ignored) {}
+    }
+    params = params || {};
+    for (var param in params) {
+      if (Object.prototype.hasOwnProperty.call(params, param) && params[param] !== undefined && params[param] !== null && params[param] !== "") {
+        values[param] = params[param];
+      }
+    }
+    return myspoti.query(values);
+  }
+
+  function appendQuery(url, query) {
+    return query ? url + (url.indexOf("?") >= 0 ? "&" : "?") + query : url;
+  }
+
   function requestJson(url, timeoutMs) {
     try {
       var response = myspoti.http.get(url, { timeout: timeoutMs || REQUEST_TIMEOUT_MS });
@@ -122,8 +162,9 @@
 
     var wantedIsrc = normaliseIsrc(requested.isrc);
     var foundIsrc = normaliseIsrc(candidate.isrc);
-    if (wantedIsrc && foundIsrc && wantedIsrc !== foundIsrc) return false;
-    if (wantedIsrc && foundIsrc && wantedIsrc === foundIsrc) return true;
+    // Eclipse treats ISRC as the recording identity. A matching ISRC wins
+    // even when provider metadata uses a different title/artist spelling.
+    if (wantedIsrc && foundIsrc) return wantedIsrc === foundIsrc;
 
     var strict = setting("strict_match") !== false;
     if (strict) {
@@ -211,42 +252,46 @@
     return answer;
   }
 
-  function resolveByIsrc(base, requested, manifest) {
+  function resolveByIsrc(addon, manifest, requested) {
     var isrc = normaliseIsrc(requested.isrc);
     if (!isrc || !hasResource(manifest.resources, "isrc")) return undefined;
-    var url = base + "/resolve-isrc?" + myspoti.query({ isrc: isrc });
+    var url = appendQuery(addon.base + "/resolve-isrc", addonQuery(addon, manifest, { isrc: isrc }));
     var result = requestJson(url, REQUEST_TIMEOUT_MS);
     if (!result.ok) return null;
     var id = text(result.data.trackId || result.data.id);
-    return id ? { id: id } : null;
+    if (!id) return null;
+    var resolved = {};
+    for (var key in result.data) if (Object.prototype.hasOwnProperty.call(result.data, key)) resolved[key] = result.data[key];
+    resolved.id = id;
+    return resolved;
   }
 
-  function resolveByIdentity(base, requested, manifest) {
+  function resolveByIdentity(addon, manifest, requested) {
     if (!hasResource(manifest.resources, "resolve")) return undefined;
-    var url = base + "/resolve?" + myspoti.query({
+    var url = appendQuery(addon.base + "/resolve", addonQuery(addon, manifest, {
       isrc: normaliseIsrc(requested.isrc) || undefined,
       title: text(requested.title),
       artist: artistName(requested),
       durationMs: durationMs(requested) || undefined
-    });
+    }));
     var result = requestJson(url, REQUEST_TIMEOUT_MS);
     if (!result.ok || !result.data.item || !text(result.data.item.id)) return null;
 
     var item = result.data.item;
     if (item.type && item.type !== "track") return null;
-    if (normalise(item.title) !== normalise(requested.title)) return null;
-    if (normalise(item.artist) !== normalise(artistName(requested))) return null;
     var wantedIsrc = normaliseIsrc(requested.isrc);
     var returnedIsrc = normaliseIsrc(item.isrc);
-    // Eclipse's /resolve contract is exact when an ISRC was supplied.
-    if (wantedIsrc && wantedIsrc !== returnedIsrc) return null;
+    // Per Eclipse's contract, ISRC is authoritative when supplied.
+    if (wantedIsrc) return wantedIsrc === returnedIsrc ? item : null;
+    if (normalise(item.title) !== normalise(requested.title)) return null;
+    if (normalise(item.artist) !== normalise(artistName(requested))) return null;
     return item;
   }
 
-  function resolveBySearch(base, requested) {
+  function resolveBySearch(addon, manifest, requested) {
     var query = (artistName(requested) + " " + text(requested.title)).trim();
     if (!query) return null;
-    var result = requestJson(base + "/search?" + myspoti.query({ q: query }), REQUEST_TIMEOUT_MS);
+    var result = requestJson(appendQuery(addon.base + "/search", addonQuery(addon, manifest, { q: query })), REQUEST_TIMEOUT_MS);
     if (!result.ok || !Array.isArray(result.data.tracks)) return null;
 
     for (var i = 0; i < result.data.tracks.length; i += 1) {
@@ -256,35 +301,40 @@
     return null;
   }
 
-  function fetchStream(base, trackId) {
-    var url = base + "/stream/" + encodePathSegment(trackId);
+  function fetchStream(addon, manifest, trackId) {
+    var url = appendQuery(addon.base + "/stream/" + encodePathSegment(trackId), addonQuery(addon, manifest, {}));
     var result = requestJson(url, STREAM_TIMEOUT_MS);
     return result.ok ? result.data : null;
   }
 
+  function streamFromResolved(resolved) {
+    if (!resolved || !text(resolved.streamURL)) return null;
+    var stream = {};
+    for (var key in resolved) if (Object.prototype.hasOwnProperty.call(resolved, key)) stream[key] = resolved[key];
+    stream.url = resolved.streamURL;
+    return stream;
+  }
+
   function resolveWithAddon(addon, track) {
-    var base = addon.base;
-    var manifest = getManifest(base);
+    var manifest = getManifest(addon.base);
     if (!manifest) return null;
     var resolved = null;
     if (normaliseIsrc(track.isrc) && hasResource(manifest.resources, "isrc")) {
-      resolved = resolveByIsrc(base, track, manifest);
+      resolved = resolveByIsrc(addon, manifest, track);
     }
     if (!resolved && hasResource(manifest.resources, "resolve")) {
-      resolved = resolveByIdentity(base, track, manifest);
+      resolved = resolveByIdentity(addon, manifest, track);
     }
     if (!resolved && hasResource(manifest.resources, "search")) {
-      resolved = resolveBySearch(base, track);
+      resolved = resolveBySearch(addon, manifest, track);
     }
     if (!resolved) return null;
-    if (text(resolved.streamURL)) {
-      return audioAnswer(track, { url: resolved.streamURL, format: resolved.format }, resolved.format);
-    }
-    if (!text(resolved.id)) return null;
-    return audioAnswer(track, fetchStream(base, resolved.id), resolved.format);
+    var stream = streamFromResolved(resolved);
+    if (!stream && text(resolved.id)) stream = fetchStream(addon, manifest, resolved.id);
+    return audioAnswer(track, stream, resolved.format);
   }
 
-  function downloadAnswer(track, stream, fallbackFormat, isrcMatched) {
+  function downloadAnswer(track, stream, fallbackFormat, isrcMatched, providerName) {
     if (!stream || !isWebAudioUrl(stream.url)) return null;
     if (stream.manifest && String(stream.manifest).toLowerCase() !== "none") return null;
     if (/\.(m3u8|mpd)(?:[?#]|$)/i.test(text(stream.url))) return null;
@@ -296,7 +346,7 @@
     var file = {
       url: text(stream.url),
       format: format,
-      provider: "Eclipse Music"
+      provider: text(providerName) || "Eclipse Music"
     };
     var bitDepth = Number(stream.bitDepth);
     if (isFinite(bitDepth) && bitDepth >= 8 && bitDepth <= 32) file.bitDepth = bitDepth;
@@ -309,31 +359,26 @@
   }
 
   function resolveDownloadWithAddon(addon, track) {
-    var base = addon.base;
-    var manifest = getManifest(base);
+    var manifest = getManifest(addon.base);
     if (!manifest) return null;
 
     var resolved = null;
     var matchedByIsrc = false;
     if (normaliseIsrc(track.isrc) && hasResource(manifest.resources, "isrc")) {
-      resolved = resolveByIsrc(base, track, manifest);
+      resolved = resolveByIsrc(addon, manifest, track);
       matchedByIsrc = !!resolved;
     }
     if (!resolved && hasResource(manifest.resources, "resolve")) {
-      resolved = resolveByIdentity(base, track, manifest);
+      resolved = resolveByIdentity(addon, manifest, track);
     }
     if (!resolved && hasResource(manifest.resources, "search")) {
-      resolved = resolveBySearch(base, track);
+      resolved = resolveBySearch(addon, manifest, track);
     }
     if (!resolved) return null;
 
-    var stream = null;
-    if (text(resolved.streamURL)) {
-      stream = { url: resolved.streamURL, format: resolved.format };
-    } else if (text(resolved.id)) {
-      stream = fetchStream(base, resolved.id);
-    }
-    var file = downloadAnswer(track, stream, resolved.format, matchedByIsrc);
+    var stream = streamFromResolved(resolved);
+    if (!stream && text(resolved.id)) stream = fetchStream(addon, manifest, resolved.id);
+    var file = downloadAnswer(track, stream, resolved.format, matchedByIsrc, manifest.name);
     return file ? [file] : null;
   }
 
@@ -352,7 +397,7 @@
       notify("Add-on " + index + ": manifest must advertise both search and stream.");
       return;
     }
-    var result = requestJson(base + "/search?" + myspoti.query({ q: TEST_QUERY }), REQUEST_TIMEOUT_MS);
+    var result = requestJson(appendQuery(base + "/search", addonQuery({ index: index }, manifest, { q: TEST_QUERY })), REQUEST_TIMEOUT_MS);
     if (!result.ok || !Array.isArray(result.data.tracks)) {
       notify("Add-on " + index + ": manifest works, but search test failed.");
       return;
@@ -377,7 +422,7 @@
       var manifest = getManifest(addon.base);
       if (!manifest) { notify('Add-on ' + addon.index + ': FAIL — manifest unavailable or invalid.'); continue; }
       if (!hasResource(manifest.resources, 'search') || !hasResource(manifest.resources, 'stream')) { notify('Add-on ' + addon.index + ': FAIL — search/stream capability missing.'); continue; }
-      var sample = requestJson(addon.base + '/search?' + myspoti.query({ q: TEST_QUERY }), REQUEST_TIMEOUT_MS);
+      var sample = requestJson(appendQuery(addon.base + '/search', addonQuery(addon, manifest, { q: TEST_QUERY })), REQUEST_TIMEOUT_MS);
       if (!sample.ok || !Array.isArray(sample.data.tracks)) { notify('Add-on ' + addon.index + ': FAIL — sample search failed.'); continue; }
       if (track && !resolveWithAddon(addon, track)) { notify('Add-on ' + addon.index + ': FAIL — diagnostic track did not produce a playable stream.'); continue; }
       passed += 1;
