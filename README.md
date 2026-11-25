@@ -1,6 +1,6 @@
 # Stream Bridge
 
-An Orpheon extension that connects Eclipse Music add-ons for streaming and downloads.
+A Revera extension that connects Eclipse Music add-ons for streaming and downloads.
 
 ## Features
 
@@ -12,15 +12,14 @@ An Orpheon extension that connects Eclipse Music add-ons for streaming and downl
 
 ## Setup
 
-1. Install the extension in Orpheon.
+1. Install the extension in Revera.
 2. Open its settings.
 3. Paste each add-on's HTTPS `manifest.json` URL.
 4. Test the connection and enable the add-ons you want to use.
 
 Add-ons are tried in settings order. Keep fallback enabled to move to the next add-on when needed.
 
-
 ## Documentation
 
-- [Orpheon extension API](https://github.com/kota-zo/myspoti/blob/main/docs/extensions/API.md)
+- [Revera extension API](https://github.com/kota-zo/myspoti/blob/main/docs/extensions/API.md)
 - [Eclipse Music add-on guide](https://eclipsemusic.app/docs)
