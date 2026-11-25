@@ -19,12 +19,6 @@ An Orpheon extension that connects Eclipse Music add-ons for streaming and downl
 
 Add-ons are tried in settings order. Keep fallback enabled to move to the next add-on when needed.
 
-## Development
-
-```bash
-myspoti-ext check .
-myspoti-ext pack .
-```
 
 ## Documentation
 
